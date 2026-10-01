@@ -1,0 +1,16 @@
+{
+  "name": "bcom-ai-teacher",
+  "version": "1.0.0",
+  "description": "An AI teaching platform: a friendly B.Com teacher that explains, quizzes and simplifies.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --env-file=.env --watch server.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.60.0",
+    "express": "^4.21.0"
+  }
+}
