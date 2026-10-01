@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Professor Meera · B.Com AI Teacher</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#eef3ec">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Prof. Meera">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #eef3ec;
+    --line: #cfdccb;
+    --ink: #1c2b4a;
+    --margin: #c4463a;
+    --student: #dfe8f5;
+    --muted: #5d6b82;
+    --serif: "Literata", Georgia, serif;
+    --sans: "Nunito Sans", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#17211d; --line:#26352e; --ink:#e3ebe6; --student:#22334d; --muted:#98a89f; --margin:#e0705f; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--sans); color: var(--ink); background: var(--paper);
+    background-image: repeating-linear-gradient(transparent 0 31px, var(--line) 31px 32px);
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 14px 16px 10px 56px; background: var(--paper);
+    border-bottom: 2px solid var(--margin);
+  }
+  h1 { font: 600 1.25rem/1.2 var(--serif); margin: 0; }
+  header p { margin: 2px 0 10px; color: var(--muted); font-size: .9rem; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  select, button, textarea { font: inherit; color: inherit; }
+  select {
+    background: var(--paper); border: 1px solid var(--ink); border-radius: 6px;
+    padding: 6px 8px; max-width: 100%;
+  }
+  .modes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .modes button {
+    border: 1px solid var(--ink); background: transparent; border-radius: 999px;
+    padding: 5px 12px; cursor: pointer; font-size: .85rem;
+  }
+  .modes button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  main { flex: 1; overflow-y: auto; padding: 16px 16px 8px 56px; position: relative; }
+  main::before { /* the red margin line of a ledger book */
+    content: ""; position: fixed; left: 44px; top: 0; bottom: 0; width: 2px;
+    background: var(--margin); opacity: .55; pointer-events: none;
+  }
+  .msg { max-width: 720px; margin: 0 0 16px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.teacher { font-family: var(--serif); font-size: 1.02rem; }
+  .msg.student {
+    background: var(--student); border-radius: 10px; padding: 8px 12px;
+    margin-left: auto; width: fit-content; font-size: .97rem;
+  }
+  .who { display: block; font: 700 .8rem var(--sans); color: var(--margin); margin-bottom: 2px; }
+  .starters { display: flex; flex-direction: column; gap: 8px; max-width: 520px; }
+  .starters button {
+    text-align: left; border: 1px dashed var(--ink); background: transparent;
+    padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  }
+  form {
+    display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 56px;
+    background: var(--paper); border-top: 1px solid var(--line);
+  }
+  textarea {
+    flex: 1; resize: none; border: 1px solid var(--ink); border-radius: 10px;
+    padding: 9px 12px; background: var(--paper); max-height: 120px;
+  }
+  form button {
+    background: var(--ink); color: var(--paper); border: 0; border-radius: 10px;
+    padding: 0 18px; font-weight: 700; cursor: pointer;
+  }
+  form button:disabled { opacity: .5; cursor: wait; }
+  :focus-visible { outline: 3px solid var(--margin); outline-offset: 2px; }
+  @media (max-width: 480px) {
+    header, main, form { padding-left: 34px; }
+    main::before { left: 24px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Professor Meera</h1>
+  <p>Your B.Com teacher. Ask anything, in your own words.</p>
+  <div class="controls">
+    <select id="subject" aria-label="Subject"></select>
+  </div>
+  <div class="modes" id="modes" role="group" aria-label="How should I teach?">
+    <button data-mode="explain" aria-pressed="true">Explain</button>
+    <button data-mode="simplify" aria-pressed="false">Make it simple</button>
+    <button data-mode="quiz" aria-pressed="false">Quiz me</button>
+    <button data-mode="exam" aria-pressed="false">Exam answer</button>
+  </div>
+</header>
+
+<main id="chat" aria-live="polite">
+  <div class="msg teacher"><span class="who">Professor Meera</span>Hello! Pick a subject above and ask me anything. No question is too small. Not sure where to begin?</div>
+  <div class="starters" id="starters"></div>
+</main>
+
+<form id="form">
+  <textarea id="input" rows="1" placeholder="Type your doubt here..." aria-label="Your question" required></textarea>
+  <button id="send" type="submit">Ask</button>
+</form>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const chat = $("chat"), input = $("input"), send = $("send"), subjectEl = $("subject");
+let mode = "explain";
+let history = []; // {role, content}
+
+const STARTERS = [
+  "What is the difference between a debit and a credit?",
+  "Explain demand and supply with a chai stall example",
+  "What is depreciation and why do we charge it?",
+];
+
+// Load subjects
+fetch("/api/subjects").then(r => r.json()).then(list => {
+  subjectEl.innerHTML = list.map(s => `<option>${s}</option>`).join("");
+});
+
+// Starter questions
+STARTERS.forEach(q => {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = q;
+  b.onclick = () => ask(q);
+  $("starters").appendChild(b);
+});
+
+// Mode buttons
+$("modes").addEventListener("click", (e) => {
+  const btn = e.target.closest("button"); if (!btn) return;
+  mode = btn.dataset.mode;
+  document.querySelectorAll("#modes button").forEach(b => b.setAttribute("aria-pressed", b === btn));
+  if (mode === "quiz" && !history.length) ask("Start a quiz for me on this subject.");
+});
+
+// Subject change starts a fresh class
+subjectEl.addEventListener("change", () => { history = []; });
+
+// Tiny, safe formatter: escapes HTML, then supports **bold**
+function format(text) {
+  const safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function addMessage(role, text = "") {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  if (role === "teacher") div.innerHTML = '<span class="who">Professor Meera</span><span class="body"></span>';
+  else div.textContent = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+async function ask(question) {
+  const starters = $("starters"); if (starters) starters.remove();
+  addMessage("student", question);
+  history.push({ role: "user", content: question });
+
+  const bubble = addMessage("teacher");
+  const body = bubble.querySelector(".body");
+  body.textContent = "Thinking...";
+  let answer = "";
+  send.disabled = true;
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject: subjectEl.value, mode, messages: history }),
+    });
+    if (!res.ok || !res.body) {
+      const info = await res.json().catch(() => ({}));
+      throw new Error(info.error || "Request failed");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop();
+      for (const ev of events) {
+        if (!ev.startsWith("data: ")) continue;
+        const data = JSON.parse(ev.slice(6));
+        if (data.text) { answer += data.text; body.innerHTML = format(answer); }
+        if (data.error) { body.textContent = data.error; }
+        chat.scrollTop = chat.scrollHeight;
+      }
+    }
+    if (answer) history.push({ role: "assistant", content: answer });
+    else history.pop(); // remove the unanswered question
+  } catch (err) {
+    body.textContent = err.message && err.message !== "Request failed"
+      ? err.message
+      : "Could not reach the teacher. Check your connection and try again.";
+    history.pop();
+  } finally {
+    send.disabled = false;
+    input.focus();
+  }
+}
+
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = input.value.trim();
+  if (!q || send.disabled) return;
+  input.value = ""; input.style.height = "auto";
+  ask(q);
+});
+
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); }
+});
+input.addEventListener("input", () => {
+  input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 120) + "px";
+});
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+</script>
+</body>
+</html>
