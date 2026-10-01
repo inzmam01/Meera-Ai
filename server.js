@@ -1,13 +1,11 @@
 import express from "express";
-import Anthropic from "@anthropic-ai/sdk";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeIcon } from "./icons.js";
+import { streamAnswer, hasKey, MODEL, AIError } from "./ai.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
-const MODEL = process.env.MODEL || "claude-sonnet-5-5";
 const PORT = process.env.PORT || 3000;
 
 app.set("trust proxy", 1); // needed on Render/Railway so each student gets their own IP
@@ -21,7 +19,8 @@ app.get("/icon-:size.png", (req, res) => {
   res.type("png").set("Cache-Control", "public, max-age=86400").send(icon);
 });
 
-app.get("/health", (_req, res) => res.send("ok"));
+// Open /health in your browser to check that the AI key is set
+app.get("/health", (_req, res) => res.json({ ok: true, aiKeySet: hasKey(), model: MODEL }));
 
 // Simple per-student limit so strangers can't drain your API credit
 const LIMIT = Number(process.env.RATE_LIMIT || 30); // questions per hour per IP
@@ -85,6 +84,14 @@ Formatting: plain text with **bold** for key terms and simple "-" bullets. No ta
 }
 
 // ---------- API ----------
+function friendlyError(err) {
+  if (!(err instanceof AIError)) return "The teacher is busy right now. Please try again in a moment.";
+  if (err.status === 401) return "The teacher's access key is not valid. (Site owner: check DEEPSEEK_API_KEY.)";
+  if (err.status === 402) return "The teacher's AI balance has run out. (Site owner: add balance on the DeepSeek platform.)";
+  if (err.status === 429) return "Many students are asking at once. Please try again in a minute.";
+  return "The teacher is busy right now. Please try again in a moment.";
+}
+
 app.get("/api/subjects", (_req, res) => res.json(Object.keys(SUBJECTS)));
 
 app.post("/api/chat", rateLimit, async (req, res) => {
@@ -113,25 +120,26 @@ app.post("/api/chat", rateLimit, async (req, res) => {
 
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
+  const controller = new AbortController();
+  res.on("close", () => controller.abort()); // stop if the student leaves
+
   try {
-    const stream = client.messages.stream({
-      model: MODEL,
-      max_tokens: 1200,
+    await streamAnswer({
       system: buildSystemPrompt(subject, mode),
       messages: history,
+      signal: controller.signal,
+      onText: (text) => send({ text }),
     });
-
-    req.on("close", () => stream.abort()); // stop if the student leaves
-    stream.on("text", (text) => send({ text }));
-    await stream.finalMessage();
     send({ done: true });
   } catch (err) {
-    console.error("AI error:", err?.message || err);
-    send({ error: "The teacher is busy right now. Please try again in a moment." });
+    if (controller.signal.aborted) return;
+    console.error("AI error:", err.status || "", err.detail || err.message);
+    send({ error: friendlyError(err) });
   } finally {
     res.end();
   }
 });
 
+if (!hasKey()) console.warn("WARNING: DEEPSEEK_API_KEY is not set. The teacher cannot answer yet.");
 app.listen(PORT, () => console.log(`Professor Meera is teaching at http://localhost:${PORT}`));
-               
+                                            
